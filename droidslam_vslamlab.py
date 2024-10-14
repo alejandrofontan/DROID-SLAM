@@ -126,7 +126,7 @@ if __name__ == '__main__':
         
         droid.track(t, image, intrinsics=intrinsics)
 
-    traj_est, tstamps = droid.terminate(image_stream(args.sequence_path, args.rgb_txt, args.calibration_yaml, args.stride))
+    traj_est = droid.terminate(image_stream(args.sequence_path, args.rgb_txt, args.calibration_yaml, args.stride))
     
     poses = droid.video.poses[:t].cpu().numpy()
     keyFrameTrajectory_txt = os.path.join(args.exp_folder, args.exp_it.zfill(5) + '_KeyFrameTrajectory' + '.txt')
