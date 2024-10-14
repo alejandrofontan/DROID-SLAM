@@ -1,0 +1,21 @@
+
+t0: 0 # starting frame
+stride: 3 # frame stride
+
+weights: "droid.pth" 
+buffer: 512
+
+beta: 0.3 # weight for translation / rotation components of flow
+filter_thresh: 2.4 #  how much motion before considering new keyframe
+warmup: 8 # number of warmup frames
+
+keyframe_thresh: 4.0 # threshold to create a new keyframe
+frontend_thresh: 16.0 # add edges between frames whithin this distance
+frontend_window: 25 # frontend optimization window
+frontend_radius: 2 # force edges between frames within radius
+frontend_nms: 1 # non-maximal supression of edges
+
+backend_thresh: 22.0
+backend_radius: 2
+backend_nms: 3
+
