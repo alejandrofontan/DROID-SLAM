@@ -10,37 +10,56 @@ import os
 import glob 
 import time
 import argparse
+import yaml
+import signal
 
 from torch.multiprocessing import Process
 from droid import Droid
 
 import torch.nn.functional as F
 
-
+timestamps = []
 def show_image(image):
     image = image.permute(1, 2, 0).cpu().numpy()
     cv2.imshow('image', image / 255.0)
     cv2.waitKey(1)
 
-def image_stream(imagedir, calib, stride):
+def image_stream(sequence_path, rgb_txt, calibration_yaml, stride):
     """ image generator """
 
-    calib = np.loadtxt(calib, delimiter=" ")
-    fx, fy, cx, cy = calib[:4]
+    
+    with open(calibration_yaml, 'r') as file:
+        lines = file.readlines()
+    if lines and lines[0].strip() == '%YAML:1.0':
+        lines = lines[1:]
+
+    calibration = yaml.safe_load(''.join(lines))  
+
+    fx, fy, cx, cy = calibration["Camera.fx"],calibration["Camera.fy"],calibration["Camera.cx"],calibration["Camera.cy"]
+    camera_distortion = True
+    dist_coeffs = np.array([calibration["Camera.k1"], calibration["Camera.k2"], calibration["Camera.p1"], calibration["Camera.p2"], calibration["Camera.k3"]], dtype=np.float32)
+    if (calibration["Camera.k1"] == 0 and calibration["Camera.k2"] == 0 and calibration["Camera.k3"] == 0
+            and calibration["Camera.p1"] == 0 and calibration["Camera.p2"] == 0):
+        camera_distortion = False
 
     K = np.eye(3)
     K[0,0] = fx
     K[0,2] = cx
     K[1,1] = fy
     K[1,2] = cy
-
-    image_list = sorted(os.listdir(imagedir))[::stride]
-    print(image_list)
-    exit(0)
+       
+    image_list = []
+    timestamps.clear()
+    with open(rgb_txt, 'r') as file:
+        for line in file:
+            timestamp, path = line.strip().split(' ')
+            image_list.append(path)
+            timestamps.append(timestamp)
+            
     for t, imfile in enumerate(image_list):
-        image = cv2.imread(os.path.join(imagedir, imfile))
-        if len(calib) > 4:
-            image = cv2.undistort(image, K, calib[4:])
+        image = cv2.imread(os.path.join(sequence_path, imfile))
+        if camera_distortion:
+            image = cv2.undistort(image, K, dist_coeffs)
 
         h0, w0, _ = image.shape
         h1 = int(h0 * np.sqrt((384 * 512) / (h0 * w0)))
@@ -57,37 +76,20 @@ def image_stream(imagedir, calib, stride):
         yield t, image[None], intrinsics
 
 
-def save_reconstruction(droid, reconstruction_path):
-
-    from pathlib import Path
-    import random
-    import string
-
-    t = droid.video.counter.value
-    tstamps = droid.video.tstamp[:t].cpu().numpy()
-    images = droid.video.images[:t].cpu().numpy()
-    disps = droid.video.disps_up[:t].cpu().numpy()
-    poses = droid.video.poses[:t].cpu().numpy()
-    intrinsics = droid.video.intrinsics[:t].cpu().numpy()
-
-    Path("reconstructions/{}".format(reconstruction_path)).mkdir(parents=True, exist_ok=True)
-    np.save("reconstructions/{}/tstamps.npy".format(reconstruction_path), tstamps)
-    np.save("reconstructions/{}/images.npy".format(reconstruction_path), images)
-    np.save("reconstructions/{}/disps.npy".format(reconstruction_path), disps)
-    np.save("reconstructions/{}/poses.npy".format(reconstruction_path), poses)
-    np.save("reconstructions/{}/intrinsics.npy".format(reconstruction_path), intrinsics)
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--imagedir", type=str, help="path to image directory")
-    parser.add_argument("--calib", type=str, help="path to calibration file")
+    
+    parser.add_argument("--sequence_path", type=str, help="path to image directory")
+    parser.add_argument("--calibration_yaml", type=str, help="path to calibration file")
+    parser.add_argument("--rgb_txt", type=str, help="path to image list")
+    parser.add_argument("--exp_folder", type=str, help="path to save results")
+    parser.add_argument("--exp_it", type=str, help="experiment iteration")
+    
     parser.add_argument("--t0", default=0, type=int, help="starting frame")
     parser.add_argument("--stride", default=3, type=int, help="frame stride")
 
     parser.add_argument("--weights", default="droid.pth")
     parser.add_argument("--buffer", type=int, default=512)
-    parser.add_argument("--image_size", default=[240, 320])
     parser.add_argument("--disable_vis", action="store_true")
 
     parser.add_argument("--beta", type=float, default=0.3, help="weight for translation / rotation components of flow")
@@ -103,7 +105,7 @@ if __name__ == '__main__':
     parser.add_argument("--backend_radius", type=int, default=2)
     parser.add_argument("--backend_nms", type=int, default=3)
     parser.add_argument("--upsample", action="store_true")
-    parser.add_argument("--reconstruction_path", help="path to saved reconstruction")
+
     args = parser.parse_args()
 
     args.stereo = False
@@ -111,12 +113,7 @@ if __name__ == '__main__':
 
     droid = None
 
-    # need high resolution depths
-    if args.reconstruction_path is not None:
-        args.upsample = True
-
-    tstamps = []
-    for (t, image, intrinsics) in tqdm(image_stream(args.imagedir, args.calib, args.stride)):
+    for (t, image, intrinsics) in tqdm(image_stream(args.sequence_path, args.rgb_txt, args.calibration_yaml, args.stride)):
         if t < args.t0:
             continue
 
@@ -124,12 +121,20 @@ if __name__ == '__main__':
             show_image(image[0])
 
         if droid is None:
-            args.image_size = [image.shape[2], image.shape[3]]
+            args.image_size = [image.shape[2], image.shape[3]]         
             droid = Droid(args)
         
         droid.track(t, image, intrinsics=intrinsics)
 
-    if args.reconstruction_path is not None:
-        save_reconstruction(droid, args.reconstruction_path)
-
-    traj_est = droid.terminate(image_stream(args.imagedir, args.calib, args.stride))
+    traj_est, tstamps = droid.terminate(image_stream(args.sequence_path, args.rgb_txt, args.calibration_yaml, args.stride))
+    
+    poses = droid.video.poses[:t].cpu().numpy()
+    keyFrameTrajectory_txt = os.path.join(args.exp_folder, args.exp_it.zfill(5) + '_KeyFrameTrajectory' + '.txt')
+    
+    with open(keyFrameTrajectory_txt, 'w') as file:
+    	for i_pose, pose in enumerate(traj_est):
+    	    ts = timestamps[i_pose]
+    	    tx, ty, tz = pose[0], pose[1], pose[2]
+    	    qx, qy, qz, qw = pose[3], pose[4], pose[5], pose[6]
+    	    line = str(ts) + " " + str(tx) + " " + str(ty) + " " + str(tz) + " " + str(qx) + " " + str(qy) + " " + str(qz) + " " + str(qw) + "\n"
+    	    file.write(line)
