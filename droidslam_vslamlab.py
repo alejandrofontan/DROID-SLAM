@@ -84,29 +84,33 @@ if __name__ == '__main__':
     parser.add_argument("--rgb_txt", type=str, help="path to image list")
     parser.add_argument("--exp_folder", type=str, help="path to save results")
     parser.add_argument("--exp_it", type=str, help="experiment iteration")
-    
-    parser.add_argument("--t0", default=0, type=int, help="starting frame")
-    parser.add_argument("--stride", default=3, type=int, help="frame stride")
-
-    parser.add_argument("--weights", default="droid.pth")
-    parser.add_argument("--buffer", type=int, default=512)
+    parser.add_argument("--settings_yaml", type=str, help="settings_yaml")
     parser.add_argument("--disable_vis", action="store_true")
-
-    parser.add_argument("--beta", type=float, default=0.3, help="weight for translation / rotation components of flow")
-    parser.add_argument("--filter_thresh", type=float, default=2.4, help="how much motion before considering new keyframe")
-    parser.add_argument("--warmup", type=int, default=8, help="number of warmup frames")
-    parser.add_argument("--keyframe_thresh", type=float, default=4.0, help="threshold to create a new keyframe")
-    parser.add_argument("--frontend_thresh", type=float, default=16.0, help="add edges between frames whithin this distance")
-    parser.add_argument("--frontend_window", type=int, default=25, help="frontend optimization window")
-    parser.add_argument("--frontend_radius", type=int, default=2, help="force edges between frames within radius")
-    parser.add_argument("--frontend_nms", type=int, default=1, help="non-maximal supression of edges")
-
-    parser.add_argument("--backend_thresh", type=float, default=22.0)
-    parser.add_argument("--backend_radius", type=int, default=2)
-    parser.add_argument("--backend_nms", type=int, default=3)
     parser.add_argument("--upsample", action="store_true")
 
     args = parser.parse_args()
+    with open(args.settings_yaml, 'r') as file:
+        settings = yaml.safe_load(file)
+
+    args.t0 = settings['settings']['t0']
+    args.stride = settings['settings']['stride']
+
+    args.weights = settings['settings']['weights']
+    args.buffer = settings['settings']['buffer']
+
+    args.beta = settings['settings']['beta']
+    args.filter_thresh = settings['settings']['filter_thresh']
+    args.warmup = settings['settings']['warmup']
+
+    args.keyframe_thresh = settings['settings']['keyframe_thresh']
+    args.frontend_thresh = settings['settings']['frontend_thresh']
+    args.frontend_window = settings['settings']['frontend_window']
+    args.frontend_radius = settings['settings']['frontend_radius']
+    args.frontend_nms = settings['settings']['frontend_nms']
+
+    args.backend_thresh = settings['settings']['backend_thresh']
+    args.backend_radius = settings['settings']['backend_radius']
+    args.backend_nms = settings['settings']['backend_nms']
 
     args.stereo = False
     torch.multiprocessing.set_start_method('spawn')
