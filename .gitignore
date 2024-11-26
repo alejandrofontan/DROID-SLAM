@@ -156,4 +156,4 @@ data
 figures/*.pdf
 
 droidslam_settings_ablation.yaml
-
+install_droidslam.txt
