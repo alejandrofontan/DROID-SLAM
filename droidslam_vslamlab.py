@@ -52,7 +52,7 @@ def image_stream(sequence_path, rgb_txt, calibration_yaml, stride):
     timestamps.clear()
     with open(rgb_txt, 'r') as file:
         for line in file:
-            timestamp, path = line.strip().split(' ')
+            timestamp, path, *extra = line.strip().split(' ')
             image_list.append(path)
             timestamps.append(timestamp)
             
