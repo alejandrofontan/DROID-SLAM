@@ -85,10 +85,14 @@ if __name__ == '__main__':
     parser.add_argument("--exp_folder", type=str, help="path to save results")
     parser.add_argument("--exp_it", type=str, help="experiment iteration")
     parser.add_argument("--settings_yaml", type=str, help="settings_yaml")
-    parser.add_argument("--disable_vis", action="store_true")
-    parser.add_argument("--upsample", action="store_true")
+    parser.add_argument("--verbose", type=str, help="verbose")
+    parser.add_argument("--upsample", type=str, help="upsample")
 
     args = parser.parse_args()
+    verbose = bool(int(args.verbose))
+    args.disable_vis = not bool(int(args.verbose))
+    args.upsample = bool(int(args.upsample))
+
     with open(args.settings_yaml, 'r') as file:
         settings = yaml.safe_load(file)
 
@@ -121,7 +125,7 @@ if __name__ == '__main__':
         if t < args.t0:
             continue
 
-        if not args.disable_vis:
+        if verbose:
             show_image(image[0])
 
         if droid is None:
