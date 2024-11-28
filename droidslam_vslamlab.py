@@ -88,7 +88,7 @@ if __name__ == '__main__':
     parser.add_argument("--verbose", type=str, help="verbose")
     parser.add_argument("--upsample", type=str, help="upsample")
 
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     verbose = bool(int(args.verbose))
     args.disable_vis = not bool(int(args.verbose))
     args.upsample = bool(int(args.upsample))
